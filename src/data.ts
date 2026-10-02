@@ -1,15 +1,86 @@
-export type Employee = { id:number; name:string; initials:string; email:string; role:string; shift:string; target:number; hours:number; color:string; active:boolean }
-export type Shift = { type:'Day'|'Evening'|'Night Audit'; time:string; employee:number|null; open?:boolean; reason?:string }
+export type Employee = {
+  id: number
+  name: string
+  initials: string
+  email: string
+  role: string
+  shift: string
+  target: number
+  color: string
+  active: boolean
+}
+
+export type ShiftType = 'Day' | 'Evening' | 'Night Audit'
+
+export type Shift = {
+  type: ShiftType
+  time: string
+  employee: number | null
+  open?: boolean
+  reason?: string
+  normalEmployee?: number
+  replacement?: boolean
+}
+
+export type Schedule = Record<string, Shift[]>
+
+export type ScheduleOverride = {
+  date: string
+  shift: ShiftType
+  unavailableEmployee: number
+  reason: 'Approved time off' | 'Sick leave'
+  replacementEmployee: number | null
+}
+
 export const employees: Employee[] = [
-  {id:1,name:'Sarah Mitchell',initials:'SM',email:'sarah@example.com',role:'Front Desk',shift:'Day',target:40,hours:40,color:'#DCECE6',active:true},
-  {id:2,name:'Marcus Johnson',initials:'MJ',email:'marcus@example.com',role:'Front Desk',shift:'Evening',target:40,hours:32,color:'#E6E1F2',active:true},
-  {id:3,name:'Elena Rodriguez',initials:'ER',email:'elena@example.com',role:'Night Auditor',shift:'Night Audit',target:40,hours:40,color:'#F5E4D2',active:true},
-  {id:4,name:'James Kim',initials:'JK',email:'james@example.com',role:'Front Desk',shift:'Day',target:24,hours:30,color:'#DDE8F4',active:true},
-  {id:5,name:'Nina Patel',initials:'NP',email:'nina@example.com',role:'Housekeeping',shift:'Day',target:32,hours:24,color:'#F3DFE5',active:true},
+  { id: 1, name: 'Sarah Mitchell', initials: 'SM', email: 'sarah@example.com', role: 'Front Desk', shift: 'Day', target: 40, color: '#DCECE6', active: true },
+  { id: 2, name: 'Marcus Johnson', initials: 'MJ', email: 'marcus@example.com', role: 'Front Desk', shift: 'Evening', target: 40, color: '#E6E1F2', active: true },
+  { id: 3, name: 'Elena Rodriguez', initials: 'ER', email: 'elena@example.com', role: 'Night Auditor', shift: 'Night Audit', target: 40, color: '#F5E4D2', active: true },
+  { id: 4, name: 'James Kim', initials: 'JK', email: 'james@example.com', role: 'Front Desk', shift: 'Day', target: 24, color: '#DDE8F4', active: true },
+  { id: 5, name: 'Nina Patel', initials: 'NP', email: 'nina@example.com', role: 'Housekeeping', shift: 'Day', target: 32, color: '#F3DFE5', active: true },
 ]
-export const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
-export const schedule: Record<string,Shift[]> = Object.fromEntries(days.map((day,i)=>[day,[
-  {type:'Day',time:'7:00 AM – 3:00 PM',employee:i===4?null:(i===5?4:1),open:i===4,reason:i===4?'Time off':undefined},
-  {type:'Evening',time:'3:00 PM – 11:00 PM',employee:2},
-  {type:'Night Audit',time:'11:00 PM – 7:00 AM',employee:3},
+
+export const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+// The permanent repeating template. Date-specific events must never be written here.
+export const baseSchedule: Schedule = Object.fromEntries(days.map((day, index) => [day, [
+  { type: 'Day', time: '7:00 AM – 3:00 PM', employee: index === 5 ? 4 : 1 },
+  { type: 'Evening', time: '3:00 PM – 11:00 PM', employee: 2 },
+  { type: 'Night Audit', time: '11:00 PM – 7:00 AM', employee: 3 },
 ]]))
+
+export const initialOverrides: ScheduleOverride[] = [{
+  date: '2026-10-09',
+  shift: 'Day',
+  unavailableEmployee: 1,
+  reason: 'Approved time off',
+  replacementEmployee: null,
+}]
+
+/** Materialize any week without changing the repeating base template. */
+export function createWeeklySchedule(overrides: ScheduleOverride[], weekStart = '2026-10-05'): Schedule {
+  const start = new Date(`${weekStart}T00:00:00Z`)
+  return Object.fromEntries(days.map((day, index) => [day, baseSchedule[day].map(baseShift => {
+    const date = new Date(start)
+    date.setUTCDate(start.getUTCDate() + index)
+    const dateKey = date.toISOString().slice(0, 10)
+    const override = overrides.find(item => item.date === dateKey && item.shift === baseShift.type && item.unavailableEmployee === baseShift.employee)
+    if (!override) return { ...baseShift }
+    return {
+      ...baseShift,
+      employee: override.replacementEmployee,
+      normalEmployee: baseShift.employee ?? undefined,
+      open: override.replacementEmployee === null,
+      reason: override.reason,
+      replacement: override.replacementEmployee !== null,
+    }
+  })]))
+}
+
+export function calculateWeeklyHours(schedule: Schedule): Record<number, number> {
+  const totals: Record<number, number> = {}
+  days.forEach(day => schedule[day].forEach(shift => {
+    if (shift.employee !== null) totals[shift.employee] = (totals[shift.employee] ?? 0) + 8
+  }))
+  return totals
+}
