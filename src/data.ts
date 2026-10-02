@@ -31,6 +31,8 @@ export type ScheduleOverride = {
   unavailableEmployee: number
   reason: 'Approved time off' | 'Sick leave' | 'Manual adjustment'
   replacementEmployee: number | null
+  /** When true, the employee is unavailable for every shift on this date. */
+  allDay?: boolean
 }
 
 export const employees: Employee[] = [
@@ -56,7 +58,36 @@ export const initialOverrides: ScheduleOverride[] = [{
   unavailableEmployee: 1,
   reason: 'Approved time off',
   replacementEmployee: null,
+  allDay: true,
 }]
+
+export function isEmployeeUnavailable(
+  employeeId: number,
+  date: string,
+  shift: ShiftType,
+  overrides: ScheduleOverride[],
+): boolean {
+  return overrides.some(item =>
+    item.date === date &&
+    item.unavailableEmployee === employeeId &&
+    item.reason !== 'Manual adjustment' &&
+    (item.allDay === true || item.shift === shift),
+  )
+}
+
+/** Return only employees who may be newly assigned to this dated shift. */
+export function getAvailableEmployees(
+  employeeList: Employee[],
+  shift: ShiftType,
+  date?: string,
+  overrides: ScheduleOverride[] = [],
+): Employee[] {
+  return employeeList.filter(employee =>
+    employee.active &&
+    employee.eligibleShifts.includes(shift) &&
+    (!date || !isEmployeeUnavailable(employee.id, date, shift, overrides)),
+  )
+}
 
 /** Materialize any week without changing the repeating base template. */
 export function createWeeklySchedule(overrides: ScheduleOverride[], weekStart = '2026-10-05', template = baseSchedule): Schedule {
